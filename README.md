@@ -17,7 +17,7 @@ Statistics (as of now)
 ## 2. Elo System
 
 The vanilla Elo system
-- Logistic distribution; a 400 rating difference corresponds to a 10:1 odds for winning
+- Logistic distribution; 400 higher in rating corresponds to a 10:1 odds for winning
 - Every new player receives an initial rating of 1500
 - Each match: the winner's rating gain equals the loser's rating loss
 - The gain is proportional to the probability of losing
