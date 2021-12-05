@@ -4,14 +4,14 @@
 
 Criteria
 - Legacy of the Void (LotV)
-- Ended between 2016/01/01 - 2021/11/30 (as of now)
+- Ended between 2016/01/01 - 2021/12/03 (as of now)
 - Open bracket, group stage, playoffs
 
 Statistics (as of now)
-- 107 premier events
+- 108 premier events
 - 231 major events
-- 12,889 matches (1 match = 1 complete Best-of-N)
-- 37,378 maps
+- 12,904 matches (1 match = 1 complete Best-of-N)
+- 37,439 maps
 - 685 pro-players
 
 ## 2. Elo System
@@ -28,8 +28,9 @@ The vanilla Elo system
 
 https://tinyurl.com/sc2-tournament-elo
 
-- The table shows those players whose rating >= 1600 and #match >= 20
-- A total of 99 dominant players are on the list (as of now)
+- The tables show those players whose rating >= 1600 and #match >= 20
+- Two tabs rank players respectively by current ratings and highest career ratings
+- A total of 101/153 dominant players (current/highest) (as of now)
 - Players' races are shown as the races they use most frequently
-- The table also contains players' highest rating and rating changes in the past 60 days
-- 4 players have once achieved 2000+ ratings (as of now)
+- The tables also contain players' rating changes in the past 180 days
+- 7 players have once achieved 2000+ ratings (as of now)
