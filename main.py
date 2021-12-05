@@ -88,9 +88,21 @@ def get_date_from_html(html, year):
     }
     month = month_to_int[month]
     day = int(day)
-    date = f"{year:02}{month:02}{day:02}"
-    date = int(date)
-    return date
+    integer_date = int(f"{year:02}{month:02}{day:02}")
+    return integer_date
+
+
+def get_full_link(link):
+    site_prefix = "https://liquipedia.net"
+    link_root = "/starcraft2/"
+    link_prefix = site_prefix + link_root
+
+    if link.startswith(link_prefix):
+        return link
+    elif link.startswith(link_root):
+        return site_prefix + link
+    else:
+        assert False
 
 
 def get_date_to_tournament_from_div(div, year):
@@ -113,17 +125,15 @@ def get_date_to_tournament_from_div(div, year):
 
         tournament_name = "".join(row[2].itertext())
         tournament_link = row[2][0].attrib["href"]
+        tournament_link = get_full_link(tournament_link)
 
         prize = "".join(row[4].itertext())
         assert prize[0] == "$"
         prize = prize[1:].replace(",", "")
-        try:
-            prize = int(prize)
-        except ValueError:
-            prize = int(float(prize))
+        prize = int(float(prize))
 
         date_to_tournament[(end_date, start_date)].append(
-            [start_date, end_date, tournament_name, tournament_link, prize]
+            [start_date, end_date, tournament_name, prize, tournament_link]
         )
     return date_to_tournament
 
@@ -159,7 +169,7 @@ def run_liquipedia_tournament_list_parser(arg):
     for date, tournament_list in major_date_to_tournament.items():
         for tournament in tournament_list:
             date_to_tournament[date].append(tournament)
-    data = [["level", "start", "end", "name", "link", "prize"]]
+    data = [["level", "start", "end", "name", "prize", "link"]]
     for _, tournament_list in sorted(date_to_tournament.items()):
         for tournament in tournament_list:
             data.append(tournament)
@@ -182,7 +192,7 @@ def run_liquipedia_tournament_page_crawler(arg):
     tournament_data = read_csv(arg.tournament_list_file, "pandas")
     tournaments = len(tournament_data) - 1
 
-    for ti, (level, start, end, name, link, prize) in enumerate(tournament_data[1:]):
+    for ti, (level, start, end, name, prize, link) in enumerate(tournament_data[1:]):
         logger.info(f"Crawling ({ti + 1}/{tournaments}): {link}")
         file = get_tournament_file_name(start, end, link)
         file = os.path.join(arg.tournament_html_dir, file + ".html")
@@ -434,7 +444,7 @@ def run_liquipedia_tournament_page_parser(arg):
         "match", "p1_name", "p1_race", "p1_score", "p2_score", "p2_race", "p2_name",
         "link", "prize",
     ]]
-    for ti, (level, start, end, name, link, prize) in enumerate(tournament_data[1:]):
+    for ti, (level, start, end, name, prize, link) in enumerate(tournament_data[1:]):
         file = get_tournament_file_name(start, end, link)
         file = os.path.join(arg.tournament_html_dir, file + ".html")
         logger.info(f"Parsing ({ti + 1}/{tournaments}): {name}")
@@ -445,7 +455,7 @@ def run_liquipedia_tournament_page_parser(arg):
             match_list.append([
                 level, start, end, name,
                 title, p1_name, p1_race, p1_score, p2_score, p2_race, p2_name,
-                link, prize,
+                prize, link,
             ])
     matches = len(match_list) - 1
     write_csv(arg.match_list_file, "pandas", match_list)
@@ -455,13 +465,13 @@ def run_liquipedia_tournament_page_parser(arg):
 
 def run_player_name_extraction(arg):
     match_list = read_csv(arg.match_list_file, "pandas")[1:]
-    name_to_count = defaultdict(lambda: 0)
-    lame_to_count = defaultdict(lambda: 0)
     lame_to_name_race = defaultdict(lambda: set())
+    name_race_to_count = defaultdict(lambda: 0)
     scores = 0
     for _, _, _, _, _, p1_name, p1_race, p1_score, p2_score, p2_race, p2_name, _, _ in match_list:
         scores += int(p1_score)
         scores += int(p2_score)
+
         for name, race in [(p1_name, p1_race), (p2_name, p2_race)]:
             lame = name.lower()
             i = lame.find("(")
@@ -469,15 +479,15 @@ def run_player_name_extraction(arg):
                 lame = lame[:i].strip()
             if name == "HerO":
                 lame = name
-            name_to_count[name] += 1
-            lame_to_count[lame] += 1
+
             lame_to_name_race[lame].add((name, race))
+            name_race_to_count[(name, race)] += 1
 
     lame_list = sorted(lame_to_name_race, key=lambda lame: lame.lower())
     player_list = []
     for lame in lame_list:
         name_race_set = lame_to_name_race[lame]
-        name_race_list = sorted(name_race_set, key=lambda nr: name_to_count[nr[0]], reverse=True)
+        name_race_list = sorted(name_race_set, key=lambda nr: name_race_to_count[nr], reverse=True)
         rame_list = [f"{name}({race})" for name, race in name_race_list]
         player_list.append(rame_list)
 
@@ -515,7 +525,7 @@ class Player:
         latest_old = None
         while True:
             _, old_date = self.recent_elo_list[0]
-            if (cache_date - old_date).days < 60:
+            if (cache_date - old_date).days < 180:
                 break
             latest_old = self.recent_elo_list.popleft()
         if latest_old is not None:
@@ -560,7 +570,7 @@ def get_elo_update(p1, p2, score1, score2):
     update1 = k * (score1 - expected1)
     # update2 = k * (score2 - expected2)
 
-    update1 = int(update1)
+    update1 = round(update1)
     update2 = -update1
     return update1, update2
 
@@ -571,10 +581,16 @@ def run_player_elo_calculation(arg):
 
     match_list = read_csv(arg.match_list_file, "pandas")[1:]
     latest_date = None
+    date_range = (get_python_date(arg.first_date), get_python_date(arg.last_date))
 
     for _, start, end, _, _, p1_name, p1_race, p1_score, p2_score, p2_race, p2_name, _, _ in match_list:
-        # update elo after a tournament
         match_date = (get_python_date(start), get_python_date(end))
+        if match_date[1] < date_range[0]:
+            continue
+        if match_date[1] > date_range[1]:
+            break
+
+        # update elo after a tournament
         if latest_date is not None and latest_date != match_date:
             for pid, player in pid_to_player.items():
                 player.update_elo_cache(latest_date[1])
@@ -610,34 +626,42 @@ def run_player_elo_calculation(arg):
             player.in_tournament = False
 
     data = [["id", "elo", "recent", "tournaments", "matches", "career_high"]]
-    # for pid, p in sorted(pid_to_player.items(), key=lambda pp: pp[1].highest_elo, reverse=True):
     for pid, p in sorted(pid_to_player.items(), key=lambda pp: pp[1].elo, reverse=True):
         if p.matches < 20:
             continue
-        # if p.highest_elo < 1600:
         if p.elo < 1600:
             break
         recent_elo_change = f"{p.get_recent_elo_change():+d}"
-        data.append([
-            pid, int(p.elo), recent_elo_change, p.tournaments, p.matches, int(p.highest_elo),
-        ])
-    # write_csv("..\\highest_elo.csv", "pandas", data)
+        data.append([pid, p.elo, recent_elo_change, p.tournaments, p.matches, p.highest_elo])
     write_csv(arg.player_elo_file, "pandas", data)
+
+    data = [["id", "elo", "recent", "tournaments", "matches", "career_high"]]
+    for pid, p in sorted(pid_to_player.items(), key=lambda pp: pp[1].highest_elo, reverse=True):
+        if p.matches < 20:
+            continue
+        if p.highest_elo < 1600:
+            break
+        recent_elo_change = f"{p.get_recent_elo_change():+d}"
+        data.append([pid, p.elo, recent_elo_change, p.tournaments, p.matches, p.highest_elo])
+    write_csv("..\\highest_elo.csv", "pandas", data)
     return
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--premier_list_file", type=str, default="..\\premier_20211201.html")
-    parser.add_argument("--major_list_file", type=str, default="..\\major_20211201.html")
+    parser.add_argument("--premier_list_file", type=str, default="..\\premier_20211205.html")
+    parser.add_argument("--major_list_file", type=str, default="..\\major_20211205.html")
     parser.add_argument("--tournament_list_file", type=str, default="..\\tournament_list.csv")
     parser.add_argument("--tournament_html_dir", type=str, default="..\\tournament_html")
     parser.add_argument("--match_list_file", type=str, default="..\\match_list.csv")
     parser.add_argument("--player_name_file", type=str, default="..\\player_name.csv")
     parser.add_argument("--player_elo_file", type=str, default="..\\player_elo.csv")
+    parser.add_argument("--player_highest_elo_file", type=str, default="..\\player_highest_elo.csv")
+
     parser.add_argument("--first_date", type=str, default="20160101")
-    parser.add_argument("--last_date", type=str, default="20211130")
+    parser.add_argument("--last_date", type=str, default="20211203")
     parser.add_argument("--elo_level", type=str, default="major")
+
     parser.add_argument("--indent", type=int, default=2)
 
     arg = parser.parse_args()
