@@ -28,9 +28,10 @@ The vanilla Elo system
 
 https://tinyurl.com/sc2-tournament-elo
 
-- The tables show those dominant players whose ratings >= 1600 and #match >= 20
-- Two tabs rank players respectively by current ratings and highest career ratings
-- A total of 100/154 dominant players (current ratings / highest ratings) (as of now)
-- Players' races are shown as the races they use most frequently
+- Two tables rank players respectively by current ratings and highest career ratings
 - The tables also contain players' rating changes in the past 180 days
+- Players' races are shown as the races they use most frequently
+- To be listed, a player must have a rating >= 1600 and #match >= 20
+- For the current ratings table only: To be listed, a player must have rating changes in the past 180 days
+- A total of 67/154 dominant players (current ratings / highest ratings) (as of now)
 - 7 players have once achieved 2000+ ratings (as of now)
