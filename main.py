@@ -538,17 +538,16 @@ class Player:
         return
 
     def update_elo_cache(self, cache_date):
-        if self.elo_cache == 0:
-            return
-
         self.elo += self.elo_cache
         self.elo_cache = 0
         if self.highest_elo < self.elo:
             self.highest_elo = self.elo
 
-        self.recent_elo_list.append((self.elo, cache_date))
+        if self.elo != self.recent_elo_list[-1][0]:
+            self.recent_elo_list.append((self.elo, cache_date))
+
         latest_old = None
-        while True:
+        while self.recent_elo_list:
             _, old_date = self.recent_elo_list[0]
             if (cache_date - old_date).days < 180:
                 break
