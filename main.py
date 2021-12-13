@@ -658,7 +658,8 @@ def run_player_elo_calculation(arg):
         if p.elo < 1600:
             break
         full_name = p.get_full_name()
-        recent_elo_change = f"{p.get_recent_elo_change():+d}"
+        recent_elo_change = p.get_recent_elo_change()
+        recent_elo_change = f"{recent_elo_change:+d}" if recent_elo_change != 0 else "0"
         data.append([full_name, p.elo, recent_elo_change, p.tournaments, p.matches, p.highest_elo])
     write_csv(arg.player_elo_file, "pandas", data)
 
@@ -669,7 +670,8 @@ def run_player_elo_calculation(arg):
         if p.highest_elo < 1600:
             break
         full_name = p.get_full_name()
-        recent_elo_change = f"{p.get_recent_elo_change():+d}"
+        recent_elo_change = p.get_recent_elo_change()
+        recent_elo_change = f"{recent_elo_change:+d}" if recent_elo_change != 0 else "0"
         data.append([full_name, p.elo, recent_elo_change, p.tournaments, p.matches, p.highest_elo])
     write_csv("..\\highest_elo.csv", "pandas", data)
     return
