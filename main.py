@@ -657,9 +657,11 @@ def run_player_elo_calculation(arg):
             continue
         if p.elo < 1600:
             break
-        full_name = p.get_full_name()
         recent_elo_change = p.get_recent_elo_change()
+        if recent_elo_change == 0:
+            continue
         recent_elo_change = f"{recent_elo_change:+d}" if recent_elo_change != 0 else "0"
+        full_name = p.get_full_name()
         data.append([full_name, p.elo, recent_elo_change, p.tournaments, p.matches, p.highest_elo])
     write_csv(arg.player_elo_file, "pandas", data)
 
@@ -669,9 +671,9 @@ def run_player_elo_calculation(arg):
             continue
         if p.highest_elo < 1600:
             break
-        full_name = p.get_full_name()
         recent_elo_change = p.get_recent_elo_change()
         recent_elo_change = f"{recent_elo_change:+d}" if recent_elo_change != 0 else "0"
+        full_name = p.get_full_name()
         data.append([full_name, p.elo, recent_elo_change, p.tournaments, p.matches, p.highest_elo])
     write_csv("..\\highest_elo.csv", "pandas", data)
     return
@@ -699,7 +701,7 @@ def main():
     # run_liquipedia_tournament_page_crawler(arg)
     # run_liquipedia_tournament_page_parser(arg)
     # run_player_name_extraction(arg)
-    # run_player_elo_calculation(arg)
+    run_player_elo_calculation(arg)
     return
 
 
