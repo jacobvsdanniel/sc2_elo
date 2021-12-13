@@ -158,7 +158,7 @@ def parse_tournment_list_html(source_file, first_date, last_date, level):
                     date_to_tournament[date].append([level] + tournament)
 
     tournaments = sum(len(t_list) for t_list in date_to_tournament.values())
-    logger.info(f"Read {tournaments} {level} tournaments")
+    logger.info(f"Read {tournaments:,} {level} tournaments")
     return date_to_tournament
 
 
@@ -175,7 +175,7 @@ def run_liquipedia_tournament_list_parser(arg):
             data.append(tournament)
     tournaments = len(data) - 1
     write_csv(arg.tournament_list_file, "pandas", data)
-    logger.info(f"Saved {tournaments} tournaments to {arg.tournament_list_file}")
+    logger.info(f"Saved {tournaments:,} tournaments to {arg.tournament_list_file}")
     return
 
 
@@ -459,56 +459,81 @@ def run_liquipedia_tournament_page_parser(arg):
             ])
     matches = len(match_list) - 1
     write_csv(arg.match_list_file, "pandas", match_list)
-    logger.info(f"Saved {matches} matches to {arg.match_list_file}")
+    logger.info(f"Saved {matches:,} matches to {arg.match_list_file}")
     return
+
+
+def get_pid_from_name(name):
+    pid = name.strip().lower()
+    i = pid.find("(")
+    if i != -1:
+        pid = pid[:i].strip()
+
+    problematic_name_list = [
+        "Bunny (Danish player)",
+        "Classic (Kim Hong Jae)",
+        "DarK",
+        "Dragon (Chinese player)",
+        "FuturE",
+        "Happy (Russian player)",
+        "HerO",
+        "Lucky (American Protoss)",
+        "San (Russian player)",
+    ]
+
+    if name in problematic_name_list:
+        pid = name
+    return pid
 
 
 def run_player_name_extraction(arg):
     match_list = read_csv(arg.match_list_file, "pandas")[1:]
-    lame_to_name_race = defaultdict(lambda: set())
-    name_race_to_count = defaultdict(lambda: 0)
+    pid_name_count = defaultdict(lambda: defaultdict(lambda: 0))
+    pid_race_count = defaultdict(lambda: defaultdict(lambda: 0))
     scores = 0
+
     for _, _, _, _, _, p1_name, p1_race, p1_score, p2_score, p2_race, p2_name, _, _ in match_list:
         scores += int(p1_score)
         scores += int(p2_score)
-
         for name, race in [(p1_name, p1_race), (p2_name, p2_race)]:
-            lame = name.lower()
-            i = lame.find("(")
-            if i != -1:
-                lame = lame[:i].strip()
-            if name == "HerO":
-                lame = name
+            pid = get_pid_from_name(name)
+            pid_name_count[pid][name] += 1
+            pid_race_count[pid][race] += 1
 
-            lame_to_name_race[lame].add((name, race))
-            name_race_to_count[(name, race)] += 1
-
-    lame_list = sorted(lame_to_name_race, key=lambda lame: lame.lower())
+    pid_list = sorted(pid_name_count, key=lambda pid: (pid.lower(), pid))
     player_list = []
-    for lame in lame_list:
-        name_race_set = lame_to_name_race[lame]
-        name_race_list = sorted(name_race_set, key=lambda nr: name_race_to_count[nr], reverse=True)
-        rame_list = [f"{name}({race})" for name, race in name_race_list]
-        player_list.append(rame_list)
+    for pid in pid_list:
+        name_list = sorted(pid_name_count[pid], key=lambda name: pid_name_count[pid][name], reverse=True)
+        race_list = sorted(pid_race_count[pid], key=lambda race: pid_race_count[pid][race], reverse=True)
+        matches = sum(pid_name_count[pid].values())
+        data = [str(matches), "".join(race_list)] + name_list
+        player_list.append(data)
 
     players = len(player_list)
-    nicknames = sum(len(p) for p in player_list)
+    names = sum(len(p) - 2 for p in player_list)
+    races = sum(len(p[1]) for p in player_list)
     logger.info(f"{players:,} players")
-    logger.info(f"{nicknames:,} nicknames")
-    logger.info(f"{scores:,} scores")
+    logger.info(f"{names:,} player-names")
+    logger.info(f"{races:,} player-races")
+    logger.info(f"{scores:,} player-scores")
     write_csv(arg.player_name_file, "pandas", player_list)
     return
 
 
 class Player:
-    def __init__(self, pid):
-        self.pid = pid
+    def __init__(self, race_list, name_list):
+        self.race_list = race_list
+        self.name_list = name_list
+        self.pid = get_pid_from_name(self.name_list[0])
+
         self.elo = 1500
         self.elo_cache = 0
         self.highest_elo = self.elo
+
         self.tournaments = 0
         self.in_tournament = False
         self.matches = 0
+
         self.recent_elo_list = deque([(self.elo, date(2010, 7, 27))])
         return
 
@@ -535,16 +560,18 @@ class Player:
     def get_recent_elo_change(self):
         return self.elo - self.recent_elo_list[0][0]
 
+    def get_full_name(self):
+        return f"{self.name_list[0]}({self.race_list[0]})"
+
 
 def initialize_all_player(player_list):
-    name_to_pid = {}
     pid_to_player = {}
-    for name_list in player_list:
-        pid = name_list[0]
-        for name in name_list:
-            name_to_pid[name] = pid
-        pid_to_player[pid] = Player(pid)
-    return name_to_pid, pid_to_player
+    for rame_list in player_list:
+        race_list = [r for r in rame_list[1]]
+        name_list = rame_list[2:]
+        player = Player(race_list, name_list)
+        pid_to_player[player.pid] = player
+    return pid_to_player
 
 
 def get_python_date(str_date):
@@ -577,7 +604,7 @@ def get_elo_update(p1, p2, score1, score2):
 
 def run_player_elo_calculation(arg):
     player_list = read_csv(arg.player_name_file, "pandas")
-    name_to_pid, pid_to_player = initialize_all_player(player_list)
+    pid_to_player = initialize_all_player(player_list)
 
     match_list = read_csv(arg.match_list_file, "pandas")[1:]
     latest_date = None
@@ -600,20 +627,20 @@ def run_player_elo_calculation(arg):
         latest_date = match_date
 
         # use normalized name as unique pid
-        p1 = f"{p1_name}({p1_race})"
-        p2 = f"{p2_name}({p2_race})"
-        p1 = name_to_pid[p1]
-        p2 = name_to_pid[p2]
+        p1 = get_pid_from_name(p1_name)
+        p2 = get_pid_from_name(p2_name)
         p1 = pid_to_player[p1]
         p2 = pid_to_player[p2]
+        assert p1_race in p1.race_list
+        assert p2_race in p2.race_list
         p1.in_tournament = True
         p2.in_tournament = True
         p1.matches += 1
         p2.matches += 1
 
         # add the elo updates of the match to cache
-        p1_score = float(p1_score)
-        p2_score = float(p2_score)
+        p1_score = int(p1_score)
+        p2_score = int(p2_score)
         update1, update2 = get_elo_update(p1, p2, p1_score, p2_score)
         p1.elo_cache += update1
         p2.elo_cache += update2
@@ -631,8 +658,9 @@ def run_player_elo_calculation(arg):
             continue
         if p.elo < 1600:
             break
+        full_name = p.get_full_name()
         recent_elo_change = f"{p.get_recent_elo_change():+d}"
-        data.append([pid, p.elo, recent_elo_change, p.tournaments, p.matches, p.highest_elo])
+        data.append([full_name, p.elo, recent_elo_change, p.tournaments, p.matches, p.highest_elo])
     write_csv(arg.player_elo_file, "pandas", data)
 
     data = [["id", "elo", "recent", "tournaments", "matches", "career_high"]]
@@ -641,16 +669,17 @@ def run_player_elo_calculation(arg):
             continue
         if p.highest_elo < 1600:
             break
+        full_name = p.get_full_name()
         recent_elo_change = f"{p.get_recent_elo_change():+d}"
-        data.append([pid, p.elo, recent_elo_change, p.tournaments, p.matches, p.highest_elo])
+        data.append([full_name, p.elo, recent_elo_change, p.tournaments, p.matches, p.highest_elo])
     write_csv("..\\highest_elo.csv", "pandas", data)
     return
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--premier_list_file", type=str, default="..\\premier_20211205.html")
-    parser.add_argument("--major_list_file", type=str, default="..\\major_20211205.html")
+    parser.add_argument("--premier_list_file", type=str, default="..\\premier_2021_1213.html")
+    parser.add_argument("--major_list_file", type=str, default="..\\major_2021_1213.html")
     parser.add_argument("--tournament_list_file", type=str, default="..\\tournament_list.csv")
     parser.add_argument("--tournament_html_dir", type=str, default="..\\tournament_html")
     parser.add_argument("--match_list_file", type=str, default="..\\match_list.csv")
@@ -659,7 +688,7 @@ def main():
     parser.add_argument("--player_highest_elo_file", type=str, default="..\\player_highest_elo.csv")
 
     parser.add_argument("--first_date", type=str, default="20160101")
-    parser.add_argument("--last_date", type=str, default="20211203")
+    parser.add_argument("--last_date", type=str, default="20211212")
     parser.add_argument("--elo_level", type=str, default="major")
 
     parser.add_argument("--indent", type=int, default=2)
