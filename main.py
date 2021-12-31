@@ -2,6 +2,7 @@ import os
 import re
 import csv
 import sys
+import json
 import time
 import logging
 import argparse
@@ -23,26 +24,71 @@ csv.register_dialect(
 )
 
 
-def read_lines(file):
+def read_lines(file, write_log=True):
+    if write_log:
+        logger.info(f"Reading {file}")
+
     with open(file, "r", encoding="utf8") as f:
         line_list = f.read().splitlines()
-    lines = len(line_list)
-    logger.info(f"Read {lines:,} lines from {file}")
-    return line_list, lines
+
+    if write_log:
+        lines = len(line_list)
+        logger.info(f"Read {lines:,} lines")
+    return line_list
 
 
-def read_csv(file, dialect):
+def read_json(file, write_log=True):
+    if write_log:
+        logger.info(f"Reading {file}")
+
+    with open(file, "r", encoding="utf8") as f:
+        data = json.load(f)
+
+    if write_log:
+        objects = len(data)
+        logger.info(f"Read {objects:,} objects")
+    return data
+
+
+def write_json(file, data, indent=None, write_log=True):
+    if write_log:
+        objects = len(data)
+        logger.info(f"Writing {objects:,} objects")
+
+    with open(file, "w", encoding="utf8") as f:
+        json.dump(data, f, indent=indent)
+
+    if write_log:
+        logger.info(f"Written to {file}")
+    return data
+
+
+def read_csv(file, dialect, write_log=True):
+    if write_log:
+        logger.info(f"Reading {file}")
+
     with open(file, "r", encoding="utf8", newline="") as f:
         reader = csv.reader(f, dialect=dialect)
         row_list = [row for row in reader]
+
+    if write_log:
+        rows = len(row_list)
+        logger.info(f"Read {rows:,} rows")
     return row_list
 
 
-def write_csv(file, dialect, row_list):
+def write_csv(file, dialect, row_list, write_log=True):
+    if write_log:
+        rows = len(row_list)
+        logger.info(f"Writing {rows:,} rows")
+
     with open(file, "w", encoding="utf8", newline="") as f:
         writer = csv.writer(f, dialect=dialect)
         for row in row_list:
             writer.writerow(row)
+
+    if write_log:
+        logger.info(f"Written to {file}")
     return
 
 
@@ -139,7 +185,7 @@ def get_date_to_tournament_from_div(div, year):
 
 
 def parse_tournment_list_html(source_file, first_date, last_date, level):
-    html, _ = read_lines(source_file)
+    html = read_lines(source_file)
 
     first_year, first_month, first_day = int(first_date[:4]), int(first_date[4:6]), int(first_date[6:8])
     last_year, last_month, last_day = int(last_date[:4]), int(last_date[4:6]), int(last_date[6:8])
@@ -173,9 +219,7 @@ def run_liquipedia_tournament_list_parser(arg):
     for _, tournament_list in sorted(date_to_tournament.items()):
         for tournament in tournament_list:
             data.append(tournament)
-    tournaments = len(data) - 1
     write_csv(arg.tournament_list_file, "pandas", data)
-    logger.info(f"Saved {tournaments:,} tournaments to {arg.tournament_list_file}")
     return
 
 
@@ -197,7 +241,7 @@ def run_liquipedia_tournament_page_crawler(arg):
         file = get_tournament_file_name(start, end, link)
         file = os.path.join(arg.tournament_html_dir, file + ".html")
         if os.path.exists(file):
-            line_list, _ = read_lines(file)
+            line_list = read_lines(file, write_log=False)
             if "Rate Limited" not in line_list[0]:
                 continue
         html = requests.get(link).text
@@ -448,7 +492,7 @@ def run_liquipedia_tournament_page_parser(arg):
         file = get_tournament_file_name(start, end, link)
         file = os.path.join(arg.tournament_html_dir, file + ".html")
         logger.info(f"Parsing ({ti + 1}/{tournaments}): {name}")
-        html, _ = read_lines(file)
+        html = read_lines(file, write_log=False)
         assert "Rate Limited" not in "".join(html)
         tournament_match_list = parse_tournament_html(html)
         for title, p1_name, p1_race, p1_score, p2_score, p2_race, p2_name in tournament_match_list:
@@ -457,9 +501,7 @@ def run_liquipedia_tournament_page_parser(arg):
                 title, p1_name, p1_race, p1_score, p2_score, p2_race, p2_name,
                 prize, link,
             ])
-    matches = len(match_list) - 1
     write_csv(arg.match_list_file, "pandas", match_list)
-    logger.info(f"Saved {matches:,} matches to {arg.match_list_file}")
     return
 
 
@@ -681,8 +723,8 @@ def run_player_elo_calculation(arg):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--premier_list_file", type=str, default="..\\premier_2021_1213.html")
-    parser.add_argument("--major_list_file", type=str, default="..\\major_2021_1213.html")
+    parser.add_argument("--premier_list_file", type=str, default="..\\premier_2021_1231.html")
+    parser.add_argument("--major_list_file", type=str, default="..\\major_2021_1231.html")
     parser.add_argument("--tournament_list_file", type=str, default="..\\tournament_list.csv")
     parser.add_argument("--tournament_html_dir", type=str, default="..\\tournament_html")
     parser.add_argument("--match_list_file", type=str, default="..\\match_list.csv")
@@ -691,7 +733,7 @@ def main():
     parser.add_argument("--player_highest_elo_file", type=str, default="..\\player_highest_elo.csv")
 
     parser.add_argument("--first_date", type=str, default="20160101")
-    parser.add_argument("--last_date", type=str, default="20211212")
+    parser.add_argument("--last_date", type=str, default="20211231")
     parser.add_argument("--elo_level", type=str, default="major")
 
     parser.add_argument("--indent", type=int, default=2)
