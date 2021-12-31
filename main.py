@@ -579,19 +579,20 @@ class Player:
         self.recent_elo_list = deque([(self.elo, date(2010, 7, 27))])
         return
 
-    def update_elo_cache(self, cache_date):
+    def update_elo(self, current_date):
         self.elo += self.elo_cache
         self.elo_cache = 0
         if self.highest_elo < self.elo:
             self.highest_elo = self.elo
+        self.recent_elo_list.append((self.elo, current_date))
+        self.update_recent_elo_list(current_date)
+        return
 
-        if self.elo != self.recent_elo_list[-1][0]:
-            self.recent_elo_list.append((self.elo, cache_date))
-
+    def update_recent_elo_list(self, current_date):
         latest_old = None
         while self.recent_elo_list:
             _, old_date = self.recent_elo_list[0]
-            if (cache_date - old_date).days < 180:
+            if (current_date - old_date).days < 180:
                 break
             latest_old = self.recent_elo_list.popleft()
         if latest_old is not None:
@@ -599,7 +600,9 @@ class Player:
         return
 
     def get_recent_elo_change(self):
-        return self.elo - self.recent_elo_list[0][0]
+        recent_elo_change = self.elo - self.recent_elo_list[0][0]
+        is_recently_updated = len(self.recent_elo_list) > 1
+        return recent_elo_change, is_recently_updated
 
     def get_full_name(self):
         return f"{self.name_list[0]}({self.race_list[0]})"
@@ -661,10 +664,12 @@ def run_player_elo_calculation(arg):
         # update elo after a tournament
         if latest_date is not None and latest_date != match_date:
             for pid, player in pid_to_player.items():
-                player.update_elo_cache(latest_date[1])
                 if player.in_tournament:
+                    player.update_elo(latest_date[1])
                     player.tournaments += 1
                     player.in_tournament = False
+                else:
+                    player.update_recent_elo_list(latest_date[1])
         latest_date = match_date
 
         # use normalized name as unique pid
@@ -688,32 +693,39 @@ def run_player_elo_calculation(arg):
 
     # update elo for the last tournament
     for pid, player in pid_to_player.items():
-        player.update_elo_cache(latest_date[1])
         if player.in_tournament:
+            player.update_elo(latest_date[1])
             player.tournaments += 1
             player.in_tournament = False
+        else:
+            player.update_recent_elo_list(latest_date[1])
+
+    match_threshold = 20
+    elo_threshold = 1600
 
     data = [["id", "elo", "recent", "tournaments", "matches", "career_high"]]
     for pid, p in sorted(pid_to_player.items(), key=lambda pp: pp[1].elo, reverse=True):
-        if p.matches < 20:
+        if p.matches < match_threshold:
             continue
-        if p.elo < 1600:
+        if p.elo < elo_threshold:
             break
-        recent_elo_change = p.get_recent_elo_change()
-        if recent_elo_change == 0:
+        if len(p.recent_elo_list) == 1:
             continue
-        recent_elo_change = f"{recent_elo_change:+d}"
+        recent_elo_change, is_recently_updated = p.get_recent_elo_change()
+        if not is_recently_updated:
+            continue
+        recent_elo_change = f"{recent_elo_change:+d}" if recent_elo_change != 0 else "0"
         full_name = p.get_full_name()
         data.append([full_name, p.elo, recent_elo_change, p.tournaments, p.matches, p.highest_elo])
     write_csv(arg.player_elo_file, "pandas", data)
 
     data = [["id", "elo", "recent", "tournaments", "matches", "career_high"]]
     for pid, p in sorted(pid_to_player.items(), key=lambda pp: pp[1].highest_elo, reverse=True):
-        if p.matches < 20:
+        if p.matches < match_threshold:
             continue
-        if p.highest_elo < 1600:
+        if p.highest_elo < elo_threshold:
             break
-        recent_elo_change = p.get_recent_elo_change()
+        recent_elo_change, is_recently_updated = p.get_recent_elo_change()
         recent_elo_change = f"{recent_elo_change:+d}" if recent_elo_change != 0 else "0"
         full_name = p.get_full_name()
         data.append([full_name, p.elo, recent_elo_change, p.tournaments, p.matches, p.highest_elo])
@@ -743,7 +755,7 @@ def main():
     # run_liquipedia_tournament_page_crawler(arg)
     # run_liquipedia_tournament_page_parser(arg)
     # run_player_name_extraction(arg)
-    # run_player_elo_calculation(arg)
+    run_player_elo_calculation(arg)
     return
 
 
