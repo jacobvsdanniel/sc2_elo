@@ -4,7 +4,7 @@
 
 Criteria
 - Legacy of the Void (LotV)
-- Ended between 2016/01/01 - 2021/12/12 (as of now)
+- Ended between 2016/01/01 - 2021/12/31 (as of now)
 - Open bracket, group stage, playoffs
 
 Statistics (as of now)
