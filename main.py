@@ -19,7 +19,7 @@ logging.basicConfig(
     level=logging.INFO,
 )
 csv.register_dialect(
-    "pandas", delimiter=",", quoting=csv.QUOTE_MINIMAL, quotechar='"', doublequote=True,
+    "csv", delimiter=",", quoting=csv.QUOTE_MINIMAL, quotechar='"', doublequote=True,
     escapechar=None, lineterminator="\n", skipinitialspace=False,
 )
 
@@ -170,7 +170,12 @@ def get_date_to_tournament_from_div(div, year):
         end_date = get_date_from_html(end_date, year)
 
         tournament_name = "".join(row[2].itertext())
-        tournament_link = row[2][0].attrib["href"]
+        for cell_child in row[2]:
+            if cell_child.tag == "a":
+                tournament_link = cell_child.attrib["href"]
+                break
+        else:
+            assert False
         tournament_link = get_full_link(tournament_link)
 
         prize = "".join(row[4].itertext())
@@ -219,7 +224,7 @@ def run_liquipedia_tournament_list_parser(arg):
     for _, tournament_list in sorted(date_to_tournament.items()):
         for tournament in tournament_list:
             data.append(tournament)
-    write_csv(arg.tournament_list_file, "pandas", data)
+    write_csv(arg.tournament_list_file, "csv", data)
     return
 
 
@@ -233,7 +238,7 @@ def get_tournament_file_name(start, end, link):
 
 
 def run_liquipedia_tournament_page_crawler(arg):
-    tournament_data = read_csv(arg.tournament_list_file, "pandas")
+    tournament_data = read_csv(arg.tournament_list_file, "csv")
     tournaments = len(tournament_data) - 1
 
     for ti, (level, start, end, name, prize, link) in enumerate(tournament_data[1:]):
@@ -405,12 +410,16 @@ def get_name_race_score_from_bracket_player_html(html):
 
     exp = r'<div class="brkts-opponent-entry-left ([^" ]+)[" ]'
     match_list = re.findall(exp, html)
-    assert len(match_list) == 1
-    race = match_list[0]
-    if race in ["Terran", "Protoss", "Zerg", "Random"]:
-        race = race[0]
-    else:
+    if not match_list:
         race = "X"
+    elif len(match_list) == 1:
+        race = match_list[0]
+        if race in ["Terran", "Protoss", "Zerg", "Random"]:
+            race = race[0]
+        else:
+            race = "X"
+    else:
+        assert False
 
     tag = '<div class="brkts-opponent-score-inner">'
     i = html.find(tag)
@@ -480,13 +489,13 @@ def parse_tournament_html(html):
 
 
 def run_liquipedia_tournament_page_parser(arg):
-    tournament_data = read_csv(arg.tournament_list_file, "pandas")
+    tournament_data = read_csv(arg.tournament_list_file, "csv")
     tournaments = len(tournament_data) - 1
 
     match_list = [[
         "level", "start", "end", "tournament",
         "match", "p1_name", "p1_race", "p1_score", "p2_score", "p2_race", "p2_name",
-        "link", "prize",
+        "prize", "link",
     ]]
     for ti, (level, start, end, name, prize, link) in enumerate(tournament_data[1:]):
         file = get_tournament_file_name(start, end, link)
@@ -501,7 +510,7 @@ def run_liquipedia_tournament_page_parser(arg):
                 title, p1_name, p1_race, p1_score, p2_score, p2_race, p2_name,
                 prize, link,
             ])
-    write_csv(arg.match_list_file, "pandas", match_list)
+    write_csv(arg.match_list_file, "csv", match_list)
     return
 
 
@@ -529,7 +538,7 @@ def get_pid_from_name(name):
 
 
 def run_player_name_extraction(arg):
-    match_list = read_csv(arg.match_list_file, "pandas")[1:]
+    match_list = read_csv(arg.match_list_file, "csv")[1:]
     pid_name_count = defaultdict(lambda: defaultdict(lambda: 0))
     pid_race_count = defaultdict(lambda: defaultdict(lambda: 0))
     scores = 0
@@ -558,7 +567,7 @@ def run_player_name_extraction(arg):
     logger.info(f"{names:,} player-names")
     logger.info(f"{races:,} player-races")
     logger.info(f"{scores:,} player-scores")
-    write_csv(arg.player_name_file, "pandas", player_list)
+    write_csv(arg.player_name_file, "csv", player_list)
     return
 
 
@@ -647,10 +656,10 @@ def get_elo_update(p1, p2, score1, score2):
 
 
 def run_player_elo_calculation(arg):
-    player_list = read_csv(arg.player_name_file, "pandas")
+    player_list = read_csv(arg.player_name_file, "csv")
     pid_to_player = initialize_all_player(player_list)
 
-    match_list = read_csv(arg.match_list_file, "pandas")[1:]
+    match_list = read_csv(arg.match_list_file, "csv")[1:]
     latest_date = None
     date_range = (get_python_date(arg.first_date), get_python_date(arg.last_date))
 
@@ -717,7 +726,7 @@ def run_player_elo_calculation(arg):
         recent_elo_change = f"{recent_elo_change:+d}" if recent_elo_change != 0 else "0"
         full_name = p.get_full_name()
         data.append([full_name, p.elo, recent_elo_change, p.tournaments, p.matches, p.highest_elo])
-    write_csv(arg.player_elo_file, "pandas", data)
+    write_csv(arg.player_elo_file, "csv", data)
 
     data = [["id", "elo", "recent", "tournaments", "matches", "career_high"]]
     for pid, p in sorted(pid_to_player.items(), key=lambda pp: pp[1].highest_elo, reverse=True):
@@ -729,14 +738,14 @@ def run_player_elo_calculation(arg):
         recent_elo_change = f"{recent_elo_change:+d}" if recent_elo_change != 0 else "0"
         full_name = p.get_full_name()
         data.append([full_name, p.elo, recent_elo_change, p.tournaments, p.matches, p.highest_elo])
-    write_csv("..\\highest_elo.csv", "pandas", data)
+    write_csv("..\\highest_elo.csv", "csv", data)
     return
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--premier_list_file", type=str, default="..\\premier_2021_1231.html")
-    parser.add_argument("--major_list_file", type=str, default="..\\major_2021_1231.html")
+    parser.add_argument("--premier_list_file", type=str, default="..\\premier_2022_0701.html")
+    parser.add_argument("--major_list_file", type=str, default="..\\major_2022_0701.html")
     parser.add_argument("--tournament_list_file", type=str, default="..\\tournament_list.csv")
     parser.add_argument("--tournament_html_dir", type=str, default="..\\tournament_html")
     parser.add_argument("--match_list_file", type=str, default="..\\match_list.csv")
@@ -745,7 +754,7 @@ def main():
     parser.add_argument("--player_highest_elo_file", type=str, default="..\\player_highest_elo.csv")
 
     parser.add_argument("--first_date", type=str, default="20160101")
-    parser.add_argument("--last_date", type=str, default="20211231")
+    parser.add_argument("--last_date", type=str, default="20220630")
     parser.add_argument("--elo_level", type=str, default="major")
 
     parser.add_argument("--indent", type=int, default=2)
